@@ -1,5 +1,20 @@
 import numpy as np 
 
+# Q2
+from Bio.Align import substitution_matrices
+
+blosum62 = substitution_matrices.load("BLOSUM62")
+# BLOSUM62 has no entry for a gap, choose -4 as score. It is
+# negative because a gap should cost points, and the alignment functions
+# below ADD whatever the scoring function returns.
+GAP = -4
+
+# Score a pair of characters using BLOSUM62, with a fixed gap score.
+def blosum_score(a, b):
+    if a == "-" or b == "-":
+        return GAP
+    return blosum62[a, b]
+
 def global_alignment(seq1, seq2, scoring_function):
     """Global sequence alignment using the Needleman–Wunsch algorithm.
 
@@ -147,8 +162,92 @@ def local_alignment(seq1, seq2, scoring_function):
     Other alignments are not possible.
 
     """
-    raise NotImplementedError()
+    # Lengths of the two sequences (rows go with seq1, columns with seq2).
+    row_count = len(seq1)
+    col_count = len(seq2)
 
+    # first row and column stay 0
+    dp = np.zeros((row_count + 1, col_count + 1), dtype=float)
+    trace = np.zeros((row_count + 1, col_count + 1), dtype=int)
+
+    # Scores for each move
+    DIAG = 1
+    UP = 2
+    LEFT = 3
+
+    # Track maximum score location for traceback start, can end in any cell 
+    highest_score = 0.0
+    start_r = 0
+    start_c = 0
+
+    # Fill grid
+    for r in range(1, row_count + 1):
+        for c in range(1, col_count + 1):
+            char1 = seq1[r - 1]
+            char2 = seq2[c - 1]
+
+            match_score = dp[r - 1, c - 1] + scoring_function(char1, char2)
+            gap_seq2 = dp[r - 1, c] + scoring_function(char1, "-")
+            gap_seq1 = dp[r, c - 1] + scoring_function("-", char2)
+
+            # Local alignment clips negative values to 0
+            best = max(0.0, match_score, gap_seq2, gap_seq1)
+            dp[r, c] = best
+
+            #  Records which option won, with the zero check first.
+            if best == 0.0:
+                trace[r, c] = 0
+            elif best == match_score:
+                trace[r, c] = DIAG
+            elif best == gap_seq2:
+                trace[r, c] = UP
+            else:
+                trace[r, c] = LEFT
+
+            # Update position of global maximum in the grid
+            if best > highest_score:
+                highest_score = best
+                start_r = r
+                start_c = c
+
+    # Reconstruct alignment starting from the highest score down to 0
+    align_a = []
+    align_b = []
+    curr_r = start_r
+    curr_c = start_c
+
+    # Stop at the edge of the grid or as soon as the score reaches 0.
+    while curr_r > 0 and curr_c > 0 and dp[curr_r, curr_c] > 0:
+        step = trace[curr_r, curr_c]
+
+        if step == DIAG:
+            align_a.append(seq1[curr_r - 1])
+            align_b.append(seq2[curr_c - 1])
+            curr_r -= 1
+            curr_c -= 1
+        elif step == UP:
+            align_a.append(seq1[curr_r - 1])
+            align_b.append("-")
+            curr_r -= 1
+        elif step == LEFT:
+            align_a.append("-")
+            align_b.append(seq2[curr_c - 1])
+            curr_c -= 1
+        else:
+            break
+
+    # Reverse letters and join them into strings.
+    final_seq1 = "".join(reversed(align_a))
+    final_seq2 = "".join(reversed(align_b))
+
+    # The score of a local alignment is the highest value in the grid.
+    return final_seq1, final_seq2, float(highest_score)
+
+def scoring_function_simple(aa_i, aa_j):
+    # Simple match/mismatch helper
+    if aa_i == aa_j:
+        return 1
+    return -1
 
 ## This is an example scoring function, you should implement a version which uses a scoring matrix 
 def scoring_function_simple(aa_i,aa_j):
