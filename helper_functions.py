@@ -31,32 +31,48 @@ def global_alignment(seq1, seq2, scoring_function):
     n_rows = len(seq1)
     n_cols = len(seq2)
 
-    # dp_table stores cumulative scores; directions stores the traceback path
+ #   dp_table[r, c]   = best score for aligning the first r letters of seq1
+    #                      with the first c letters of seq2
+    #   directions[r, c] = which move gave that best score (used later to
+    #                      walk back and rebuild the alignment)
     dp_table = np.zeros((n_rows + 1, n_cols + 1), dtype=float)
     directions = np.zeros((n_rows + 1, n_cols + 1), dtype=int)
 
-    # Direction codes
+    # Scores for the three possible moves in the grid.
     DIAG = 1
     UP = 2
     LEFT = 3
 
-    # Initialize first column (align seq1 against gaps)
+    # First column: aligning the first r letters of seq1 against nothing.
+    # Every letter has to be matched with a gap, so the score is the running
+    # total of gap scores. Each of these cells was reached by moving UP.
     for r in range(1, n_rows + 1):
         dp_table[r, 0] = dp_table[r - 1, 0] + scoring_function(seq1[r - 1], "-")
         directions[r, 0] = UP
 
-    # Initialize first row (align seq2 against gaps)
+    # Initialise first row (align seq2 against gaps)
     for c in range(1, n_cols + 1):
         dp_table[0, c] = dp_table[0, c - 1] + scoring_function("-", seq2[c - 1])
         directions[0, c] = LEFT
 
-    # Fill DP table
+# Fill the rest of the grid, one cell at a time, row by row.
+    # The letter for row r is seq1[r - 1] and for column c is seq2[c - 1],
+    # because the grid has an extra row/column at the start.   
     for r in range(1, n_rows + 1):
         for c in range(1, n_cols + 1):
+            # Take the score from the cell diagonally
+            # up-left and add the score for pairing these two letters.
             diag_val = dp_table[r - 1, c - 1] + scoring_function(seq1[r - 1], seq2[c - 1])
+
+            # Take the score from the cell above and add a gap
+            # penalty. seq1's letter is paired with a gap in seq2.
             up_val = dp_table[r - 1, c] + scoring_function(seq1[r - 1], "-")
+
+            # Take the score from the cell on the left and
+            # add a gap penalty. seq2's letter is paired with a gap in seq1.
             left_val = dp_table[r, c - 1] + scoring_function("-", seq2[c - 1])
 
+            # The cell gets the best of the three options.
             best_val = max(diag_val, up_val, left_val)
             dp_table[r, c] = best_val
 
@@ -68,28 +84,34 @@ def global_alignment(seq1, seq2, scoring_function):
             else:
                 directions[r, c] = LEFT
 
-    # Trace back from bottom-right corner to origin
+    # Trace back from bottom right corner to origin
     aligned_a = []
     aligned_b = []
     r, c = n_rows, n_cols
-
+    
+    # Keep going until we reach the top-left corner (0, 0).
     while r > 0 or c > 0:
         step = directions[r, c]
 
         if step == DIAG:
+            # Both letters were paired with each other. Use both, then move
+            # diagonally up-left.
             aligned_a.append(seq1[r - 1])
             aligned_b.append(seq2[c - 1])
             r -= 1
             c -= 1
         elif step == UP:
+            # seq1's letter was paired with a gap. Move up one row.
             aligned_a.append(seq1[r - 1])
             aligned_b.append("-")
             r -= 1
         elif step == LEFT:
+            # seq2's letter was paired with a gap. Move left one column.
             aligned_a.append("-")
             aligned_b.append(seq2[c - 1])
             c -= 1
-
+    # The lists were built from the end of the sequences to the start, so
+    # reverse them and join the letters into strings.
     final_seq1 = "".join(reversed(aligned_a))
     final_seq2 = "".join(reversed(aligned_b))
     final_score = float(dp_table[n_rows, n_cols])
